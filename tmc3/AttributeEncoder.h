@@ -121,6 +121,7 @@ protected:
     const Quantizers& quant);
 
   static void computeColorPredictionWeights(
+    const AttributeDescription& desc,  //wxh add
     const AttributeParameterSet& aps,
     const PCCPointSet3& pointCloud,
     const std::vector<uint32_t>& indexesLOD,
@@ -145,6 +146,15 @@ protected:
     PCCResidualsEntropyEstimator& context,
     const Quantizer& quant);
 
+  //=============================
+  //wxh
+  static Vec3<int64_t> computeColorDistortions(
+    const AttributeDescription& desc,
+    const Vec3<attr_t> color,
+    const Vec3<attr_t> predictedColor,
+    int& residualExpGolombBits,
+    const Quantizers& quant);
+  //=============================
 private:
   std::vector<int8_t> computeLastComponentPredictionCoeff(
     const std::vector<Vec3<int64_t>>& coeffs);

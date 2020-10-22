@@ -48,7 +48,7 @@
 
 // todo(df): promote to per-attribute encoder parameter
 static const double kAttrPredLambdaR = 0.01;
-static const double kAttrPredLambdaC = 0.01;
+static const double kAttrPredLambdaC = 0.11; //wxh modify the lambda value
 
 namespace pcc {
 //============================================================================
@@ -653,6 +653,7 @@ AttributeEncoder::computeColorResiduals(
 
 void
 AttributeEncoder::computeColorPredictionWeights(
+  const AttributeDescription& desc,
   const AttributeParameterSet& aps,
   const PCCPointSet3& pointCloud,
   const std::vector<uint32_t>& indexesLOD,
@@ -685,6 +686,45 @@ AttributeEncoder::computeColorPredictionWeights(
 
     if (maxDiff >= aps.adaptive_prediction_threshold) {
       Vec3<attr_t> attrValue = pointCloud.getColor(indexesLOD[predictorIndex]);
+
+#if Enable_Real_RDO_In_Pred
+
+      // base case: weighted average of n neighbours
+      predictor.predMode = 0;
+      Vec3<attr_t> attrPred = predictor.predictColor(pointCloud, indexesLOD);
+      int residualExpGolombBits = 0;
+      Vec3<int64_t> attrDistortion = computeColorDistortions(
+        desc, attrValue, attrPred, residualExpGolombBits, quant);
+
+      double best_score =
+        (attrDistortion[0] + attrDistortion[1] + attrDistortion[2])
+        + residualExpGolombBits * kAttrPredLambdaC
+          * (double)(quant[0].stepSize() >> kFixedPointAttributeShift);
+
+      for (int i = 0; i < predictor.neighborCount; i++) {
+        if (i == aps.max_num_direct_predictors)
+          break;
+
+        attrPred = pointCloud.getColor(
+          indexesLOD[predictor.neighbors[i].predictorIndex]);
+
+        int residualExpGolombBits = 0;
+        attrDistortion = computeColorDistortions(
+          desc, attrValue, attrPred, residualExpGolombBits, quant);
+
+        double idxBits = i + (i == aps.max_num_direct_predictors - 1 ? 1 : 2);
+        double score = (attrDistortion[0] + attrDistortion[1] + attrDistortion[2])
+          + (idxBits + residualExpGolombBits) * kAttrPredLambdaC
+            * (double)(quant[0].stepSize() >> kFixedPointAttributeShift);
+
+        if (score < best_score) {
+          best_score = score;
+          predictor.predMode = i + 1;
+          // NB: setting predictor.neighborCount = 1 will cause issues
+          // with reconstruction.
+        }
+      }
+#else
 
       // base case: weighted average of n neighbours
       predictor.predMode = 0;
@@ -719,6 +759,7 @@ AttributeEncoder::computeColorPredictionWeights(
           // with reconstruction.
         }
       }
+#endif
     }
   }
 }
@@ -758,7 +799,7 @@ AttributeEncoder::encodeColorsPred(
     auto& predictor = _lods.predictors[predictorIndex];
 
     computeColorPredictionWeights(
-      aps, pointCloud, _lods.indexes, predictorIndex, predictor, encoder,
+      desc, aps, pointCloud, _lods.indexes, predictorIndex, predictor, encoder,
       context, quant);
     const Vec3<attr_t> color = pointCloud.getColor(pointIndex);
     const Vec3<attr_t> predictedColor =
@@ -1093,6 +1134,44 @@ AttributeEncoder::encodeColorsLift(
 }
 
 //----------------------------------------------------------------------------
+
+Vec3<int64_t>
+AttributeEncoder::computeColorDistortions(
+  const AttributeDescription& desc,
+  const Vec3<attr_t> color,
+  const Vec3<attr_t> predictedColor,
+  int& residualExpGolombBits,
+  const Quantizers& quant)
+{
+  Vec3<int64_t> clipMax{(1 << desc.bitdepth) - 1,
+                        (1 << desc.bitdepthSecondary) - 1,
+                        (1 << desc.bitdepthSecondary) - 1};
+
+  Vec3<attr_t> reconstructedColor;
+  residualExpGolombBits = 0;
+  for (int k = 0; k < 3; ++k) {
+    const auto& q = quant[std::min(k, 1)];
+    int64_t residual = color[k] - predictedColor[k];
+
+    int64_t residualQ = q.quantize(residual << kFixedPointAttributeShift);
+    int64_t encodeResidual = IntToUInt(residualQ);
+    int m = static_cast<int>(log(encodeResidual + 1) / log(2));
+    residualExpGolombBits += 2 * m + 1;
+    int64_t residualR =
+      divExp2RoundHalfUp(q.scale(residualQ), kFixedPointAttributeShift);
+
+    int64_t recon = predictedColor[k] + residualR;
+    reconstructedColor[k] = attr_t(PCCClip(recon, int64_t(0), clipMax[k]));
+  }
+  Vec3<int64_t> attrDistortion;
+  for (int k = 0; k < 3; ++k) {
+    attrDistortion[k] = std::abs(color[k] - reconstructedColor[k]);
+    //attrDistortion[k] = (color[k] - reconstructedColor[k]) * (color[k] - reconstructedColor[k]);
+  }
+  return attrDistortion;
+}
+
+//---------------------------------------------------------------
 
 std::vector<int8_t>
 AttributeEncoder::computeLastComponentPredictionCoeff(

@@ -35,6 +35,7 @@
 
 #ifndef PCCTMC3Common_h
 #define PCCTMC3Common_h
+#define Enable_Real_RDO_In_Pred 1 //wxh
 
 #include "PCCMath.h"
 #include "PCCPointSet.h"
