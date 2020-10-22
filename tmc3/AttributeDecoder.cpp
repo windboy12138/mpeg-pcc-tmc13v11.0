@@ -436,6 +436,9 @@ AttributeDecoder::decodeColorsPred(
   int32_t values[3];
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
+#if Enable_Progressive_qp
+  int predProgressiveQpFlagIndex = _lods.numPointsInLod[6] - 1;
+#endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -444,6 +447,10 @@ AttributeDecoder::decodeColorsPred(
     const uint32_t pointIndex = _lods.indexes[predictorIndex];
     auto quant = qpSet.quantizers(pointCloud[pointIndex], quantLayer);
     auto& predictor = _lods.predictors[predictorIndex];
+#if Enable_Progressive_qp
+    if (predictorIndex <= predProgressiveQpFlagIndex)
+		quant = qpSet.quantizers(quantLayer, {-10, 0});
+#endif
 
     computeColorPredictionWeights(
       aps, pointCloud, _lods.indexes, predictor, decoder);

@@ -49,6 +49,7 @@
 // todo(df): promote to per-attribute encoder parameter
 static const double kAttrPredLambdaR = 0.01;
 static const double kAttrPredLambdaC = 0.01;
+static int predProgressiveQpIndexFlag = 0; //wxh add
 
 namespace pcc {
 //============================================================================
@@ -748,6 +749,9 @@ AttributeEncoder::encodeColorsPred(
     residual[i].resize(pointCount);
   }
   int quantLayer = 0;
+#if Enable_Progressive_qp
+  predProgressiveQpIndexFlag = _lods.numPointsInLod[6] - 1; //wxh
+#endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -756,6 +760,10 @@ AttributeEncoder::encodeColorsPred(
     const auto pointIndex = _lods.indexes[predictorIndex];
     auto quant = qpSet.quantizers(pointCloud[pointIndex], quantLayer);
     auto& predictor = _lods.predictors[predictorIndex];
+#if Enable_Progressive_qp
+    if (predictorIndex <= predProgressiveQpIndexFlag)
+      quant = qpSet.quantizers(quantLayer, {-10, 0});
+#endif
 
     computeColorPredictionWeights(
       aps, pointCloud, _lods.indexes, predictorIndex, predictor, encoder,
