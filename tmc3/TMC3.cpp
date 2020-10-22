@@ -165,7 +165,7 @@ int
 main(int argc, char* argv[])
 {
   cout << "MPEG PCC tmc3 version " << ::pcc::version << endl;
-
+  cout << "Code Description: Predicting Transform-- use recon distortion as D, not change R in Rdo" << endl;
   Parameters params;
 
   try {
