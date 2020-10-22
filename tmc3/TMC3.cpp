@@ -46,6 +46,7 @@
 #include "io_tlv.h"
 #include "version.h"
 
+#define Code_Description  "\t Predicting Transform: Divided the Lod into 4 groups and apply qp qp-3 qp-5 qp-6 to quantization"
 using namespace std;
 using namespace pcc;
 
@@ -165,7 +166,7 @@ int
 main(int argc, char* argv[])
 {
   cout << "MPEG PCC tmc3 version " << ::pcc::version << endl;
-
+  cout << "Code Description:" << Code_Description << endl;
   Parameters params;
 
   try {

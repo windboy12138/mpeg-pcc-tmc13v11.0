@@ -444,6 +444,14 @@ AttributeDecoder::decodeColorsPred(
     const uint32_t pointIndex = _lods.indexes[predictorIndex];
     auto quant = qpSet.quantizers(pointCloud[pointIndex], quantLayer);
     auto& predictor = _lods.predictors[predictorIndex];
+#if Enable_Progressive_qp_4group
+    if (predictorIndex < _lods.numPointsInLod[4])
+      quant = qpSet.quantizers(quantLayer, {-6, 0});
+    else if (predictorIndex < _lods.numPointsInLod[5])
+      quant = qpSet.quantizers(quantLayer, {-5, 0});
+    else if (predictorIndex < _lods.numPointsInLod[6])
+      quant = qpSet.quantizers(quantLayer, {-3, 0});
+#endif
 
     computeColorPredictionWeights(
       aps, pointCloud, _lods.indexes, predictor, decoder);

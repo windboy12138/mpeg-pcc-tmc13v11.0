@@ -756,10 +756,18 @@ AttributeEncoder::encodeColorsPred(
     const auto pointIndex = _lods.indexes[predictorIndex];
     auto quant = qpSet.quantizers(pointCloud[pointIndex], quantLayer);
     auto& predictor = _lods.predictors[predictorIndex];
+#if Enable_Progressive_qp_4group
+    if (predictorIndex < _lods.numPointsInLod[4])
+      quant = qpSet.quantizers(quantLayer, {-6, 0});
+    else if (predictorIndex < _lods.numPointsInLod[5])
+      quant = qpSet.quantizers(quantLayer, {-5, 0});
+    else if (predictorIndex < _lods.numPointsInLod[6])
+      quant = qpSet.quantizers(quantLayer, {-3, 0});
+#endif
 
-    computeColorPredictionWeights(
-      aps, pointCloud, _lods.indexes, predictorIndex, predictor, encoder,
-      context, quant);
+      computeColorPredictionWeights(
+        aps, pointCloud, _lods.indexes, predictorIndex, predictor, encoder,
+        context, quant);
     const Vec3<attr_t> color = pointCloud.getColor(pointIndex);
     const Vec3<attr_t> predictedColor =
       predictor.predictColor(pointCloud, _lods.indexes);

@@ -36,6 +36,7 @@
 #ifndef PCCTMC3Common_h
 #define PCCTMC3Common_h
 
+#define Enable_Progressive_qp_4group 1
 #include "PCCMath.h"
 #include "PCCPointSet.h"
 #include "constants.h"
