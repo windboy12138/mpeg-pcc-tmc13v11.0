@@ -43,7 +43,7 @@
 #include "PayloadBuffer.h"
 #include "PCCTMC3Common.h"
 #include "quantization.h"
-
+#define Enable_Real_RDO_In_Pred 1
 namespace pcc {
 
 //============================================================================
@@ -121,6 +121,7 @@ protected:
     const Quantizers& quant);
 
   static void computeColorPredictionWeights(
+    const AttributeDescription& desc, //m55304 add
     const AttributeParameterSet& aps,
     const PCCPointSet3& pointCloud,
     const std::vector<uint32_t>& indexesLOD,
@@ -144,6 +145,15 @@ protected:
     PCCResidualsEncoder& encoder,
     PCCResidualsEntropyEstimator& context,
     const Quantizer& quant);
+
+  //=============================
+  //m55034 create this function to compute reconstruction distortion and estimate residual encoding bits
+  static Vec3<int64_t> computeColorDistortions(
+    const AttributeDescription& desc,
+    const Vec3<attr_t> color,
+    const Vec3<attr_t> predictedColor,
+    const Quantizers& quant);
+  //=============================
 
 private:
   std::vector<int8_t> computeLastComponentPredictionCoeff(

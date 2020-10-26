@@ -847,8 +847,10 @@ write(const SequenceParameterSet& sps, const AttributeParameterSet& aps)
 
   if (aps.attr_encoding == AttributeEncoding::kPredictingTransform) {
     bs.writeUe(aps.max_num_direct_predictors);
-    if (aps.max_num_direct_predictors)
-      bs.writeUe(aps.adaptive_prediction_threshold);
+	if (aps.max_num_direct_predictors) {
+		bs.writeUe(aps.adaptive_prediction_threshold);
+		bs.write(aps.only_direct_predictors);
+	}
     bs.write(aps.intra_lod_prediction_enabled_flag);
     bs.write(aps.inter_component_prediction_enabled_flag);
   }
@@ -934,8 +936,11 @@ parseAps(const PayloadBuffer& buf)
   if (aps.attr_encoding == AttributeEncoding::kPredictingTransform) {
     bs.readUe(&aps.max_num_direct_predictors);
     aps.adaptive_prediction_threshold = 0;
-    if (aps.max_num_direct_predictors)
-      bs.readUe(&aps.adaptive_prediction_threshold);
+	aps.only_direct_predictors = false;
+	if (aps.max_num_direct_predictors) {
+		bs.readUe(&aps.adaptive_prediction_threshold);
+		bs.read(&aps.only_direct_predictors);
+	}
     bs.read(&aps.intra_lod_prediction_enabled_flag);
     bs.read(&aps.inter_component_prediction_enabled_flag);
   }

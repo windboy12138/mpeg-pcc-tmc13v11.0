@@ -35,12 +35,9 @@
 
 #pragma once
 
-
 #include <cmath>
 #include <cstdint>
 
-#define _USE_MATH_DEFINES  // Required by MSVC to define M_PI,etc. in <cmath>
-#include "math.h"
 #include "entropy.h"
 #include "PCCMath.h"
 #include "hls.h"

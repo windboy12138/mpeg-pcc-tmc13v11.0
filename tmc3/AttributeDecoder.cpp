@@ -66,6 +66,8 @@ public:
   int decodeSymbol(int k1, int k2, int k3);
   void decode(int32_t values[3]);
   int32_t decode();
+
+  int maxcand;
 };
 
 //----------------------------------------------------------------------------
@@ -331,10 +333,7 @@ AttributeDecoder::computeReflectancePredictionWeights(
     }
     maxDiff = maxValue - minValue;
   }
-
-  if (maxDiff >= aps.adaptive_prediction_threshold) {
-    predictor.predMode = decoder.decodePredMode(aps.max_num_direct_predictors);
-  }
+  predictor.maxDiff = maxDiff;
 }
 
 //----------------------------------------------------------------------------
@@ -351,6 +350,7 @@ AttributeDecoder::decodeReflectancesPred(
   const int64_t maxReflectance = (1ll << desc.bitdepth) - 1;
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
+  decoder.maxcand = (aps.only_direct_predictors) ? aps.max_num_direct_predictors : (1 + aps.max_num_direct_predictors);
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -370,6 +370,32 @@ AttributeDecoder::decodeReflectancesPred(
       attValue0 = decoder.decode();
       zero_cnt = decoder.decodeRunLength();
     }
+	if (predictor.maxDiff >= aps.adaptive_prediction_threshold && aps.max_num_direct_predictors) {
+      int sign = (attValue0 < 0) ? -1 : 1;
+	  int sigIdx;
+	  if (decoder.maxcand == 4) {
+		  sigIdx = abs(attValue0) & 3;
+		  attValue0 = sign * (abs(attValue0) >> 2);
+	  }
+	  else if (decoder.maxcand == 3) {
+		  int absattrValue0 = abs(attValue0);
+		  sigIdx = absattrValue0 & 1;
+		  absattrValue0 >>= 1;
+		  if (sigIdx > 0) {
+			  sigIdx += absattrValue0 & 1;
+			  absattrValue0 >>= 1;
+		  }
+		  attValue0 = sign * absattrValue0;
+	  }
+	  else if (decoder.maxcand == 2) {
+		  sigIdx = abs(attValue0) & 1;
+		  attValue0 = sign * (abs(attValue0) >> 1);
+	  }
+	  else {
+		  sigIdx = 0;
+	  }
+      predictor.predMode = (aps.only_direct_predictors)? 1 + sigIdx : sigIdx;
+	}
     const int64_t quantPredAttValue =
       predictor.predictReflectance(pointCloud, _lods.indexes);
     const int64_t delta =
@@ -411,10 +437,7 @@ AttributeDecoder::computeColorPredictionWeights(
       maxValue[2] - minValue[2],
       (std::max)(maxValue[0] - minValue[0], maxValue[1] - minValue[1]));
   }
-
-  if (maxDiff >= aps.adaptive_prediction_threshold) {
-    predictor.predMode = decoder.decodePredMode(aps.max_num_direct_predictors);
-  }
+  predictor.maxDiff = maxDiff;
 }
 
 //----------------------------------------------------------------------------
@@ -436,6 +459,7 @@ AttributeDecoder::decodeColorsPred(
   int32_t values[3];
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
+  decoder.maxcand = (aps.only_direct_predictors) ? aps.max_num_direct_predictors : (1 + aps.max_num_direct_predictors);
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -454,6 +478,47 @@ AttributeDecoder::decodeColorsPred(
       decoder.decode(values);
       zero_cnt = decoder.decodeRunLength();
     }
+	if (predictor.maxDiff >= aps.adaptive_prediction_threshold && aps.max_num_direct_predictors) {
+      assert(decoder.maxcand >= 2);
+      int sigIdx;
+      if (decoder.maxcand == 4) {
+        int signCb = (values[1] < 0) ? -1 : 1;
+        int signCr = (values[2] < 0) ? -1 : 1;
+        int parityCb = abs(values[1]) & 1;
+        int parityCr = abs(values[2]) & 1;
+        values[1] = abs(values[1]) >> 1;
+        values[2] = abs(values[2]) >> 1;
+        values[1] = signCb * values[1];
+        values[2] = signCr * values[2];
+
+        sigIdx = (parityCb << 1) + parityCr;
+      }
+      else if (decoder.maxcand == 3) {
+        int signCb = (values[1] < 0) ? -1 : 1;
+        int parityCb = abs(values[1]) & 1;
+        values[1] = abs(values[1]) >> 1;
+        values[1] = signCb * values[1];
+        sigIdx = parityCb;
+        if (parityCb) {
+          int signCr = (values[2] < 0) ? -1 : 1;
+          int parityCr = abs(values[2]) & 1;
+          values[2] = abs(values[2]) >> 1;
+          values[2] = signCr * values[2];
+          sigIdx += parityCr;
+	    }
+      }
+      else if (decoder.maxcand == 2) {
+        int signCb = (values[1] < 0) ? -1 : 1;
+        int parityCb = abs(values[1]) & 1;
+        values[1] = abs(values[1]) >> 1;
+        values[1] = signCb * values[1];
+        sigIdx = parityCb;
+      }
+	  else {
+        sigIdx = 0;
+	  }
+      predictor.predMode = (aps.only_direct_predictors)? (sigIdx + 1) : sigIdx;
+	}
     Vec3<attr_t>& color = pointCloud.getColor(pointIndex);
     const Vec3<attr_t> predictedColor =
       predictor.predictColor(pointCloud, _lods.indexes);

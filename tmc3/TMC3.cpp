@@ -842,6 +842,11 @@ ParseParameters(int argc, char* argv[], Parameters& params)
     "Maximum number of nearest neighbour candidates used in direct"
     "attribute prediction")
 
+  ("only_direct_predictors",
+	params_attr.aps.only_direct_predictors, false,
+	"only direct predictors to be used for"
+	"attribute prediction")
+
   ("levelOfDetailCount",
     params_attr.aps.num_detail_levels, 1,
     "Attribute's number of levels of detail")
