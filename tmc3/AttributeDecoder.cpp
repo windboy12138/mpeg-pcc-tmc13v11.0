@@ -42,7 +42,7 @@
 #include "io_hls.h"
 #include "RAHT.h"
 #include "FixedPoint.h"
-
+static int thresholdLength = 0;  //wxh add
 namespace pcc {
 
 //============================================================================
@@ -388,10 +388,37 @@ AttributeDecoder::computeColorPredictionWeights(
   const PCCPointSet3& pointCloud,
   const std::vector<uint32_t>& indexes,
   PCCPredictor& predictor,
+#if Use_position_centroid_Diff
+  const uint32_t predictorIndex,
+#endif
   PCCResidualsDecoder& decoder)
 {
   int64_t maxDiff = 0;
-
+#if Use_position_centroid_Diff
+  int64_t sumDistance = 0;
+  if (predictor.neighborCount > 2 && aps.max_num_direct_predictors) {
+    auto position = pointCloud.getPosition(indexes[predictorIndex]);
+    auto position1 = pointCloud.getPosition(
+      indexes[predictor.neighbors[0].predictorIndex]);
+    auto position2 = pointCloud.getPosition(
+      indexes[predictor.neighbors[1].predictorIndex]);
+    auto position3 = pointCloud.getPosition(
+      indexes[predictor.neighbors[2].predictorIndex]);
+    Vec3<int32_t> neighborCentroid;
+    for (int i = 0; i < 3; ++i) {
+      neighborCentroid[i] = (position1[i] + position2[i] + position3[i]) / 3;
+    }
+    for (int i = 0; i < 3; ++i) {
+      sumDistance += (position[i] - neighborCentroid[i])
+        * (position[i] - neighborCentroid[i]);
+    }
+  }
+  maxDiff = std::sqrt(sumDistance);
+  predictor.maxDiff = maxDiff;
+  if (maxDiff >= thresholdLength) {
+    predictor.predMode = decoder.decodePredMode(aps.max_num_direct_predictors);
+  }
+#else
   if (predictor.neighborCount > 1 && aps.max_num_direct_predictors) {
     int64_t minValue[3] = {0, 0, 0};
     int64_t maxValue[3] = {0, 0, 0};
@@ -415,6 +442,7 @@ AttributeDecoder::computeColorPredictionWeights(
   if (maxDiff >= aps.adaptive_prediction_threshold) {
     predictor.predMode = decoder.decodePredMode(aps.max_num_direct_predictors);
   }
+#endif
 }
 
 //----------------------------------------------------------------------------
@@ -433,6 +461,19 @@ AttributeDecoder::decodeColorsPred(
                         (1 << desc.bitdepthSecondary) - 1,
                         (1 << desc.bitdepthSecondary) - 1};
 
+#if Use_position_centroid_Diff
+  auto effctiveQp = qpSet.layers[0][0];
+  thresholdLength = 8;
+  switch (effctiveQp) {
+  case 10: thresholdLength *= 1; break;
+  case 16: thresholdLength *= 2; break;
+  case 22: thresholdLength *= 4; break;
+  case 28: thresholdLength *= 8; break;
+  case 34: thresholdLength *= 16; break;
+  default: break;
+  }
+  std::cout << "the effective threshold is:  " << thresholdLength << std::endl;
+#endif
   int32_t values[3];
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
@@ -444,9 +485,13 @@ AttributeDecoder::decodeColorsPred(
     const uint32_t pointIndex = _lods.indexes[predictorIndex];
     auto quant = qpSet.quantizers(pointCloud[pointIndex], quantLayer);
     auto& predictor = _lods.predictors[predictorIndex];
-
+#if Use_position_centroid_Diff
+    computeColorPredictionWeights(
+      aps, pointCloud, _lods.indexes, predictor, predictorIndex, decoder);
+#else
     computeColorPredictionWeights(
       aps, pointCloud, _lods.indexes, predictor, decoder);
+#endif
     if (zero_cnt > 0) {
       values[0] = values[1] = values[2] = 0;
       zero_cnt--;

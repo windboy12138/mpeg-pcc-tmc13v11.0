@@ -124,6 +124,9 @@ protected:
     const PCCPointSet3& pointCloud,
     const std::vector<uint32_t>& indexes,
     PCCPredictor& predictor,
+#if Use_position_centroid_Diff
+    const uint32_t predictorIndex,
+#endif
     PCCResidualsDecoder& decoder);
 
   static void computeReflectancePredictionWeights(

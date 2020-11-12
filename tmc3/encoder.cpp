@@ -53,7 +53,9 @@
 #include "partitioning.h"
 #include "pcc_chrono.h"
 #include "ply.h"
-
+#if Use_position_centroid_Diff
+int thresholdLength;
+#endif
 namespace pcc {
 
 //============================================================================
@@ -762,7 +764,13 @@ PCCTMC3Encoder3::quantization(const PCCPointSet3& src)
   // Clamp all points to [clampBox.min, clampBox.max] after translation
   // and quantisation.   NB: minus 1 to convert to max s/t/v position
   Box3<int32_t> clampBox(0, _sps->seqBoundingBoxSize - 1);
-
+#if Use_position_centroid_Diff
+  thresholdLength = std::min(
+    _sps->seqBoundingBoxSize[0],
+    std::min(_sps->seqBoundingBoxSize[1], _sps->seqBoundingBoxSize[2]));
+  //thresholdLength /= 64;
+  //thresholdLength = 2;
+#endif
   // When using predictive geometry, sub-sample the point cloud and let
   // the predictive geometry coder quantise internally.
   if (_gps->predgeom_enabled_flag && _gps->geom_unique_points_flag)

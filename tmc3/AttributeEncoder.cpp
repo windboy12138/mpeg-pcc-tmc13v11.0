@@ -45,6 +45,11 @@
 #include "FixedPoint.h"
 
 #include <algorithm>
+#if Use_position_centroid_Diff
+extern int thresholdLength;
+#endif
+static int pointUseRdoCount = 0;
+static int pointUseRdoNotZeroCount = 0;
 
 // todo(df): promote to per-attribute encoder parameter
 static const double kAttrPredLambdaR = 0.01;
@@ -663,6 +668,28 @@ AttributeEncoder::computeColorPredictionWeights(
   const Quantizers& quant)
 {
   predictor.maxDiff = 0;
+#if Use_position_centroid_Diff
+  int64_t sumDistance = 0;
+  if (predictor.neighborCount > 2 && aps.max_num_direct_predictors) {
+    auto position = pointCloud.getPosition(indexesLOD[predictorIndex]);
+    auto position1 = pointCloud.getPosition(
+      indexesLOD[predictor.neighbors[0].predictorIndex]);
+    auto position2 = pointCloud.getPosition(
+      indexesLOD[predictor.neighbors[1].predictorIndex]);
+    auto position3 = pointCloud.getPosition(
+      indexesLOD[predictor.neighbors[2].predictorIndex]);
+    Vec3<int32_t> neighborCentroid;
+    for (int i = 0; i < 3; ++i) {
+      neighborCentroid[i] = (position1[i] + position2[i] + position3[i]) / 3;
+    }
+    for (int i = 0; i < 3; ++i) {
+      sumDistance += (position[i] - neighborCentroid[i])
+        * (position[i] - neighborCentroid[i]);
+    }
+
+    const int64_t maxDiff = std::sqrt(sumDistance);
+    predictor.maxDiff = maxDiff;
+#else
   if (predictor.neighborCount > 1 && aps.max_num_direct_predictors) {
     int64_t minValue[3] = {0, 0, 0};
     int64_t maxValue[3] = {0, 0, 0};
@@ -682,8 +709,12 @@ AttributeEncoder::computeColorPredictionWeights(
       maxValue[2] - minValue[2],
       (std::max)(maxValue[0] - minValue[0], maxValue[1] - minValue[1]));
     predictor.maxDiff = maxDiff;
-
+#endif
+#if Use_position_centroid_Diff
+    if (maxDiff >= thresholdLength) {
+#else
     if (maxDiff >= aps.adaptive_prediction_threshold) {
+#endif
       Vec3<attr_t> attrValue = pointCloud.getColor(indexesLOD[predictorIndex]);
 
       // base case: weighted average of n neighbours
@@ -719,6 +750,14 @@ AttributeEncoder::computeColorPredictionWeights(
           // with reconstruction.
         }
       }
+      // std::cout << "predMode:" << (int64_t) (predictor.predMode) << '\t'
+      //<< "maxDiff:" << maxDiff << '\t'
+      //<< "predictorIndex:" << predictorIndex<<'\t'
+      //<< "Total:" << ++pointUseRdoCount << std::endl;
+      //wxh add for test
+      ++pointUseRdoCount;
+      if (predictor.predMode != 0)
+        ++pointUseRdoNotZeroCount;
     }
   }
 }
@@ -739,6 +778,19 @@ AttributeEncoder::encodeColorsPred(
                         (1 << desc.bitdepthSecondary) - 1,
                         (1 << desc.bitdepthSecondary) - 1};
 
+#if Use_position_centroid_Diff
+  auto effctiveQp = qpSet.layers[0][0];
+  thresholdLength = 8;
+  switch (effctiveQp) {
+  case 10: thresholdLength *= 1; break;
+  case 16: thresholdLength *= 2; break;
+  case 22: thresholdLength *= 4; break;
+  case 28: thresholdLength *= 8; break;
+  case 34: thresholdLength *= 16; break;
+  default: break;
+  }
+  std::cout << "the effective threshold is:  " << thresholdLength << std::endl;
+#endif
   int32_t values[3];
   PCCResidualsEntropyEstimator context;
   int zero_cnt = 0;
@@ -802,7 +854,15 @@ AttributeEncoder::encodeColorsPred(
       residual[i][predictorIndex] = values[i];
     }
   }
-
+#if Use_position_centroid_Diff
+  std::cout << "Use position centroid distance to enable rdo process!"<< std::endl;
+#endif
+  std::cout << '\n'<< "********************************************************"<< std::endl;
+  std::cout << "Total point use rdo:  " << pointUseRdoCount << '\n'
+            << "Total point not average predMode:  " << pointUseRdoNotZeroCount<< '\n'
+            << "the nonzero percent:  "<< (double(pointUseRdoNotZeroCount) / double(pointUseRdoCount))* 100 << '%'
+            << std::endl;  //wxh add for test
+  std::cout << "********************************************************"<< '\n'<< std::endl;
   zerorun.push_back(zero_cnt);
   int run_index = 0;
   encoder.encodeRunLength(zerorun[run_index]);
@@ -810,7 +870,11 @@ AttributeEncoder::encodeColorsPred(
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     auto& predictor = _lods.predictors[predictorIndex];
+#if Use_position_centroid_Diff
+    if (predictor.maxDiff >= thresholdLength) {
+#else
     if (predictor.maxDiff >= aps.adaptive_prediction_threshold) {
+#endif
       encoder.encodePredMode(
         predictor.predMode, aps.max_num_direct_predictors);
     }
