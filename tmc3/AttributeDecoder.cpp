@@ -436,6 +436,10 @@ AttributeDecoder::decodeColorsPred(
   int32_t values[3];
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
+#if Adaptive_Quant_for_point
+  std::vector<int64_t> quantizationWeights;
+  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights);
+#endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -461,8 +465,15 @@ AttributeDecoder::decodeColorsPred(
     int64_t residual0 = 0;
     for (int k = 0; k < 3; ++k) {
       const auto& q = quant[std::min(k, 1)];
+#if Adaptive_Quant_for_point
+      int64_t Qstep = q.stepSize();
+      int64_t weight = std::min(quantizationWeights[predictorIndex], Qstep) >> kFixedPointWeightShift;
+      int64_t residual = divExp2RoundHalfUp(q.scale(values[k]), kFixedPointAttributeShift);
+      residual /= weight;
+#else
       const int64_t residual =
         divExp2RoundHalfUp(q.scale(values[k]), kFixedPointAttributeShift);
+#endif
       const int64_t recon = predictedColor[k] + residual + residual0;
       color[k] = attr_t(PCCClip(recon, int64_t(0), clipMax[k]));
 
