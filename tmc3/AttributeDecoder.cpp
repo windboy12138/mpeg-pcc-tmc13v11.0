@@ -351,6 +351,10 @@ AttributeDecoder::decodeReflectancesPred(
   const int64_t maxReflectance = (1ll << desc.bitdepth) - 1;
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
+#if Adaptive_Quant_for_point
+  std::vector<int64_t> quantizationWeights;
+  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights);
+#endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -372,8 +376,17 @@ AttributeDecoder::decodeReflectancesPred(
     }
     const int64_t quantPredAttValue =
       predictor.predictReflectance(pointCloud, _lods.indexes);
+#if Adaptive_Quant_for_point
+    int64_t Qstep = quant[0].stepSize();
+    int64_t weight = std::min(quantizationWeights[predictorIndex], Qstep)
+      >> kFixedPointWeightShift;
+    int64_t delta =
+      divExp2RoundHalfUp(quant[0].scale(attValue0), kFixedPointAttributeShift);
+    delta /= weight;
+#else
     const int64_t delta =
       divExp2RoundHalfUp(quant[0].scale(attValue0), kFixedPointAttributeShift);
+#endif
     const int64_t reconstructedQuantAttValue = quantPredAttValue + delta;
     reflectance =
       attr_t(PCCClip(reconstructedQuantAttValue, int64_t(0), maxReflectance));

@@ -555,6 +555,10 @@ AttributeEncoder::encodeReflectancesPred(
   residual.resize(pointCount);
 
   int quantLayer = 0;
+#if Adaptive_Quant_for_point
+  std::vector<int64_t> quantizationWeights;
+  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights);
+#endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
     if (predictorIndex == _lods.numPointsInLod[quantLayer]) {
@@ -573,11 +577,22 @@ AttributeEncoder::encodeReflectancesPred(
       predictor.predictReflectance(pointCloud, _lods.indexes);
     const int64_t quantAttValue = reflectance;
     const int64_t quantPredAttValue = predictedReflectance;
+#if Adaptive_Quant_for_point
+    int64_t Qstep = quant[0].stepSize();
+    int64_t weight = std::min(quantizationWeights[predictorIndex], Qstep) >> kFixedPointWeightShift;
+    const int64_t delta = quant[0].quantize(
+      ((quantAttValue - quantPredAttValue) * weight) << kFixedPointAttributeShift);
+    const auto attValue0 = delta;
+    int64_t reconstructedDelta =
+      divExp2RoundHalfUp(quant[0].scale(delta), kFixedPointAttributeShift);
+    reconstructedDelta /= weight;
+#else
     const int64_t delta = quant[0].quantize(
       (quantAttValue - quantPredAttValue) << kFixedPointAttributeShift);
     const auto attValue0 = delta;
     const int64_t reconstructedDelta =
       divExp2RoundHalfUp(quant[0].scale(delta), kFixedPointAttributeShift);
+#endif
     const int64_t reconstructedQuantAttValue =
       quantPredAttValue + reconstructedDelta;
     const attr_t reconstructedReflectance =
@@ -776,6 +791,7 @@ AttributeEncoder::encodeColorsPred(
 #if Adaptive_Quant_for_point
       int64_t Qstep = q.stepSize();
       int64_t weight = std::min(quantizationWeights[predictorIndex], Qstep) >> kFixedPointWeightShift;
+      //int kPointWeightShift = std::ceil(std::log2(weight)); //use round or ceil
       int64_t residualQ = q.quantize((residual * weight) << kFixedPointAttributeShift);
       int64_t residualR = divExp2RoundHalfUp(q.scale(residualQ), kFixedPointAttributeShift);
       residualR /= weight;
