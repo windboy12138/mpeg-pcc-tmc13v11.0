@@ -36,7 +36,7 @@
 #pragma once
 
 #include "PCCMath.h"
-
+#define Enable_user_define_weight_of_nearest_neighbor 1
 #include <cstdint>
 #include <ostream>
 #include <vector>
@@ -561,6 +561,9 @@ struct AttributeParameterSet {
   int adaptive_prediction_threshold;
   int intra_lod_search_range;
   int inter_lod_search_range;
+#if Enable_user_define_weight_of_nearest_neighbor
+  Vec3<int32_t> weightOfNearestNeighborsInAdaptiveQuant;
+#endif
 
   // NB: in stv order
   Vec3<int32_t> lodNeighBias;
@@ -604,6 +607,7 @@ struct AttributeBrickHeader {
 
   int attr_qp_delta_luma;
   int attr_qp_delta_chroma;
+
 
   std::vector<int> attr_layer_qp_delta_luma;
   std::vector<int> attr_layer_qp_delta_chroma;

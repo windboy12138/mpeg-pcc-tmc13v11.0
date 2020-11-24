@@ -1810,7 +1810,8 @@ buildPredictorsFast(
 inline void
 ComputePointQuantizationWeights(
   const std::vector<PCCPredictor>& predictors,
-  std::vector<int64_t>& quantizationWeights)
+  std::vector<int64_t>& quantizationWeights,
+	Vec3<int32_t> weightOfNearestNeighbors)
 {
   const size_t pointCount = predictors.size();
   quantizationWeights.resize(pointCount);
@@ -1824,7 +1825,8 @@ ComputePointQuantizationWeights(
     for (size_t j = 0; j < predictor.neighborCount; ++j) {
       const size_t neighborPredIndex = predictor.neighbors[j].predictorIndex;
       auto& neighborQuantWeight = quantizationWeights[neighborPredIndex];
-      int64_t weight = 8 << (2 - j);
+      //int64_t weight = 16 << (2 - j);
+      auto weight = weightOfNearestNeighbors[j];
       neighborQuantWeight += divExp2RoundHalfInf(
         weight * currentQuantWeight, kFixedPointWeightShift);
     }

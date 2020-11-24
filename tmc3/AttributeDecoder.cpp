@@ -353,7 +353,7 @@ AttributeDecoder::decodeReflectancesPred(
   int quantLayer = 0;
 #if Adaptive_Quant_for_point
   std::vector<int64_t> quantizationWeights;
-  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights);
+  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights,aps.weightOfNearestNeighborsInAdaptiveQuant);
 #endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
@@ -451,7 +451,7 @@ AttributeDecoder::decodeColorsPred(
   int quantLayer = 0;
 #if Adaptive_Quant_for_point
   std::vector<int64_t> quantizationWeights;
-  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights);
+  ComputePointQuantizationWeights(_lods.predictors, quantizationWeights, aps.weightOfNearestNeighborsInAdaptiveQuant);
 #endif
   for (size_t predictorIndex = 0; predictorIndex < pointCount;
        ++predictorIndex) {
