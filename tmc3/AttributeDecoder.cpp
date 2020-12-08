@@ -42,7 +42,9 @@
 #include "io_hls.h"
 #include "RAHT.h"
 #include "FixedPoint.h"
-static int thresholdLength = 0;  //wxh add
+#if Use_position_centroid_Diff
+int thresholdLengthDecoder;
+#endif
 namespace pcc {
 
 //============================================================================
@@ -241,7 +243,17 @@ AttributeDecoder::decode(
   PCCPointSet3& pointCloud)
 {
   QpSet qpSet = deriveQpSet(attr_desc, attr_aps, abh);
-
+  
+  #if Use_position_centroid_Diff
+  thresholdLengthDecoder = std::min(sps.seqBoundingBoxSize[0],
+	  std::min(sps.seqBoundingBoxSize[1],sps.seqBoundingBoxSize[2]));
+  std::cout << "The minimum Length of Sequence boundingBox is:\t" << thresholdLengthDecoder << std::endl;
+  thresholdLengthDecoder /= 64;
+  auto effectiveQp = qpSet.layers[0][0] - 4;
+  int thresholdShift = ceil(effectiveQp / 6.0);
+  thresholdLengthDecoder = thresholdLengthDecoder << thresholdShift;
+  std::cout << "the effective threshold is:  " << thresholdLengthDecoder << std::endl;
+  #endif
   PCCResidualsDecoder decoder(abh, ctxtMem);
   decoder.start(sps, payload, payloadLen);
 
@@ -415,7 +427,7 @@ AttributeDecoder::computeColorPredictionWeights(
   }
   maxDiff = std::sqrt(sumDistance);
   predictor.maxDiff = maxDiff;
-  if (maxDiff >= thresholdLength) {
+  if (maxDiff >= thresholdLengthDecoder) {
     predictor.predMode = decoder.decodePredMode(aps.max_num_direct_predictors);
   }
 #else
@@ -461,19 +473,6 @@ AttributeDecoder::decodeColorsPred(
                         (1 << desc.bitdepthSecondary) - 1,
                         (1 << desc.bitdepthSecondary) - 1};
 
-#if Use_position_centroid_Diff
-  auto effctiveQp = qpSet.layers[0][0];
-  thresholdLength = 8;
-  switch (effctiveQp) {
-  case 10: thresholdLength *= 1; break;
-  case 16: thresholdLength *= 2; break;
-  case 22: thresholdLength *= 4; break;
-  case 28: thresholdLength *= 8; break;
-  case 34: thresholdLength *= 16; break;
-  default: break;
-  }
-  std::cout << "the effective threshold is:  " << thresholdLength << std::endl;
-#endif
   int32_t values[3];
   int zero_cnt = decoder.decodeRunLength();
   int quantLayer = 0;
@@ -506,8 +505,10 @@ AttributeDecoder::decodeColorsPred(
     int64_t residual0 = 0;
     for (int k = 0; k < 3; ++k) {
       const auto& q = quant[std::min(k, 1)];
+
       const int64_t residual =
         divExp2RoundHalfUp(q.scale(values[k]), kFixedPointAttributeShift);
+
       const int64_t recon = predictedColor[k] + residual + residual0;
       color[k] = attr_t(PCCClip(recon, int64_t(0), clipMax[k]));
 

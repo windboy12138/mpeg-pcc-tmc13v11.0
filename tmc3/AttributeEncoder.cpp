@@ -46,7 +46,7 @@
 
 #include <algorithm>
 #if Use_position_centroid_Diff
-extern int thresholdLength;
+int thresholdLength;
 #endif
 static int pointUseRdoCount = 0;
 static int pointUseRdoNotZeroCount = 0;
@@ -395,7 +395,21 @@ AttributeEncoder::encode(
   PayloadBuffer* payload)
 {
   QpSet qpSet = deriveQpSet(desc, attr_aps, abh);
-
+ 
+#if Use_position_centroid_Diff
+  thresholdLength = std::min(
+    sps.seqBoundingBoxSize[0],
+    std::min(sps.seqBoundingBoxSize[1], sps.seqBoundingBoxSize[2]));
+  std::cout << "The minimum Length of Sequence boundingBox is:\t"
+            << thresholdLength << std::endl;
+  thresholdLength /= 64;
+  std::cout << "The 1/64 minimum Length of Sequence boundingBox is:\t"
+            << thresholdLength << std::endl;
+  Box3<int> bbox = pointCloud.computeBoundingBox();
+  auto minimumLength = std::min(bbox.max[0], std::min(bbox.max[1], bbox.max[2]));
+  std::cout << "The min Length of Slice is:\t" << bbox.min << std::endl;
+  std::cout << "The max length of Slice is:\t" << bbox.max << std::endl;
+#endif
   // generate LoDs if necessary
   if (attr_aps.lodParametersPresent() && _lods.empty())
     _lods.generate(
@@ -779,16 +793,9 @@ AttributeEncoder::encodeColorsPred(
                         (1 << desc.bitdepthSecondary) - 1};
 
 #if Use_position_centroid_Diff
-  auto effctiveQp = qpSet.layers[0][0];
-  thresholdLength = 8;
-  switch (effctiveQp) {
-  case 10: thresholdLength *= 1; break;
-  case 16: thresholdLength *= 2; break;
-  case 22: thresholdLength *= 4; break;
-  case 28: thresholdLength *= 8; break;
-  case 34: thresholdLength *= 16; break;
-  default: break;
-  }
+  auto effectiveQp = qpSet.layers[0][0] - 4;
+  int thresholdShift = ceil(effectiveQp / 6.0);
+  thresholdLength = thresholdLength << thresholdShift;
   std::cout << "the effective threshold is:  " << thresholdLength << std::endl;
 #endif
   int32_t values[3];
